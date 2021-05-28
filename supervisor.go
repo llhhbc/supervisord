@@ -89,10 +89,18 @@ type ProcessTailLog struct {
 
 // NewSupervisor create a Supervisor object with supervisor configuration file
 func NewSupervisor(configFile string) *Supervisor {
-	return &Supervisor{config: config.NewConfig(configFile),
-		procMgr:    process.NewManager(),
+	res := Supervisor{config: config.NewConfig(configFile),
 		xmlRPC:     NewXMLRPC(),
 		restarting: false}
+
+	res.config.Load()
+	sd, ok := res.config.GetSupervisord()
+	if ok {
+		res.procMgr = process.NewManager(sd.GetString("procFile", ""))
+	} else {
+		res.procMgr = process.NewManager("")
+	}
+	return &res
 }
 
 // GetConfig get the loaded supervisor configuration
@@ -244,6 +252,7 @@ func (s *Supervisor) StartProcess(r *http.Request, args *StartProcessArgs, reply
 	for _, proc := range procs {
 		proc.Start(args.Wait)
 	}
+	//s.procMgr.FlushCache()
 	reply.Success = true
 	return nil
 }
@@ -305,6 +314,7 @@ func (s *Supervisor) StopProcess(r *http.Request, args *StartProcessArgs, reply 
 	for _, proc := range procs {
 		proc.Stop(args.Wait)
 	}
+	//s.procMgr.FlushCache()
 	reply.Success = true
 	return nil
 }

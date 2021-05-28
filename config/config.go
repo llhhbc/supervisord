@@ -19,7 +19,7 @@ type Entry struct {
 	ConfigDir string
 	Group     string
 	Name      string
-	keyValues map[string]string
+	KeyValues map[string]string
 }
 
 // IsProgram return true if this is a program section
@@ -80,7 +80,7 @@ func (c *Entry) setGroup(group string) {
 // String dump the configuration as string
 func (c *Entry) String() string {
 	buf := bytes.NewBuffer(make([]byte, 0))
-	for k, v := range c.keyValues {
+	for k, v := range c.KeyValues {
 		fmt.Fprintf(buf, "%s=%s\n", k, v)
 	}
 	return buf.String()
@@ -302,7 +302,7 @@ func (c *Config) GetProgram(name string) *Entry {
 
 // GetBool get value of key as bool
 func (c *Entry) GetBool(key string, defValue bool) bool {
-	value, ok := c.keyValues[key]
+	value, ok := c.KeyValues[key]
 
 	if ok {
 		b, err := strconv.ParseBool(value)
@@ -315,7 +315,7 @@ func (c *Entry) GetBool(key string, defValue bool) bool {
 
 // HasParameter check if has parameter
 func (c *Entry) HasParameter(key string) bool {
-	_, ok := c.keyValues[key]
+	_, ok := c.KeyValues[key]
 	return ok
 }
 
@@ -329,7 +329,7 @@ func toInt(s string, factor int, defValue int) int {
 
 // GetInt get the value of the key as int
 func (c *Entry) GetInt(key string, defValue int) int {
-	value, ok := c.keyValues[key]
+	value, ok := c.KeyValues[key]
 
 	if ok {
 		return toInt(value, 1, defValue)
@@ -381,7 +381,7 @@ func parseEnv(s string) *map[string]string {
 // GetEnv get the value of key as environment setting. An environment string example:
 //  environment = A="env 1",B="this is a test"
 func (c *Entry) GetEnv(key string) []string {
-	value, ok := c.keyValues[key]
+	value, ok := c.KeyValues[key]
 	result := make([]string, 0)
 
 	if ok {
@@ -401,7 +401,7 @@ func (c *Entry) GetEnv(key string) []string {
 
 // GetString get the value of key as string
 func (c *Entry) GetString(key string, defValue string) string {
-	s, ok := c.keyValues[key]
+	s, ok := c.KeyValues[key]
 
 	if ok {
 		env := NewStringExpression("here", c.ConfigDir)
@@ -420,7 +420,7 @@ func (c *Entry) GetString(key string, defValue string) string {
 
 // GetStringExpression get the value of key as string and attempt to parse it with StringExpression
 func (c *Entry) GetStringExpression(key string, defValue string) string {
-	s, ok := c.keyValues[key]
+	s, ok := c.KeyValues[key]
 	if !ok || s == "" {
 		return ""
 	}
@@ -449,7 +449,7 @@ func (c *Entry) GetStringExpression(key string, defValue string) string {
 
 // GetStringArray get the string value and split it as array with "sep"
 func (c *Entry) GetStringArray(key string, sep string) []string {
-	s, ok := c.keyValues[key]
+	s, ok := c.KeyValues[key]
 
 	if ok {
 		return strings.Split(s, sep)
@@ -465,7 +465,7 @@ func (c *Entry) GetStringArray(key string, sep string) []string {
 //	logSize=1024
 //
 func (c *Entry) GetBytes(key string, defValue int) int {
-	v, ok := c.keyValues[key]
+	v, ok := c.KeyValues[key]
 
 	if ok {
 		if len(v) > 2 {
@@ -486,7 +486,7 @@ func (c *Entry) GetBytes(key string, defValue int) int {
 func (c *Entry) parse(section *ini.Section) {
 	c.Name = section.Name
 	for _, key := range section.Keys() {
-		c.keyValues[key.Name()] = strings.TrimSpace(key.ValueWithDefault(""))
+		c.KeyValues[key.Name()] = strings.TrimSpace(key.ValueWithDefault(""))
 	}
 }
 

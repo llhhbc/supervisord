@@ -1,9 +1,14 @@
 package process
 
 import (
+	"encoding/json"
 	"fmt"
+	"io"
+	"io/ioutil"
+	"os"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/ochinchina/supervisord/config"
 	log "github.com/sirupsen/logrus"
@@ -14,19 +19,28 @@ type Manager struct {
 	procs          map[string]*Process
 	eventListeners map[string]*Process
 	lock           sync.Mutex
+	procCacheFile  string
 }
 
 // NewManager create a new Manager object
-func NewManager() *Manager {
-	return &Manager{procs: make(map[string]*Process),
+func NewManager(procFile string) *Manager {
+	res := &Manager{procs: make(map[string]*Process),
 		eventListeners: make(map[string]*Process),
 	}
+	if procFile != "" {
+		res.procCacheFile = procFile
+		// load info from cache
+		res.LoadProcesses()
+	}
+	go res.FlushCache()
+	return res
 }
 
 // CreateProcess create a process (program or event listener) and add to this manager
 func (pm *Manager) CreateProcess(supervisorID string, config *config.Entry) *Process {
 	pm.lock.Lock()
 	defer pm.lock.Unlock()
+	//defer pm.FlushCache()
 	if config.IsProgram() {
 		return pm.createProgram(supervisorID, config)
 	} else if config.IsEventListener() {
@@ -88,6 +102,7 @@ func (pm *Manager) Add(name string, proc *Process) {
 func (pm *Manager) Remove(name string) *Process {
 	pm.lock.Lock()
 	defer pm.lock.Unlock()
+	//defer pm.FlushCache()
 	proc, _ := pm.procs[name]
 	delete(pm.procs, name)
 	log.Info("remove process:", name)
@@ -146,6 +161,7 @@ func (pm *Manager) Clear() {
 func (pm *Manager) ForEachProcess(procFunc func(p *Process)) {
 	pm.lock.Lock()
 	defer pm.lock.Unlock()
+	//defer pm.FlushCache()
 
 	procs := pm.getAllProcess()
 	for _, proc := range procs {
@@ -161,6 +177,7 @@ func (pm *Manager) ForEachProcess(procFunc func(p *Process)) {
 func (pm *Manager) AsyncForEachProcess(procFunc func(p *Process), done chan *Process) int {
 	pm.lock.Lock()
 	defer pm.lock.Unlock()
+	//defer pm.FlushCache()
 
 	procs := pm.getAllProcess()
 
@@ -198,6 +215,7 @@ func (pm *Manager) StopAllProcesses() {
 	})
 
 	wg.Wait()
+	//pm.FlushCache()
 }
 
 func sortProcess(procs []*Process) []*Process {
@@ -219,4 +237,78 @@ func sortProcess(procs []*Process) []*Process {
 	}
 
 	return result
+}
+
+type CacheInfo struct {
+	Procs          map[string]*Process
+	EventListeners map[string]*Process
+}
+
+func (pm *Manager) LoadProcesses()  {
+	cache := &CacheInfo{}
+	f, err := os.OpenFile(pm.procCacheFile, os.O_RDWR|os.O_CREATE, 0666)
+	if err != nil {
+		log.Warningf("open cache file %s failed %v, proc cache is skipped. ", pm.procCacheFile, err)
+		return
+	}
+	defer f.Close()
+	body, err := ioutil.ReadAll(f)
+	if err != nil && err != io.EOF {
+		log.Errorf("read cache file failed %v. ", err)
+		return
+	}
+	if body == nil || len(body) == 0 {
+		return
+	}
+	//start, end := 0,len(body)
+	//for i:=0;i<len(body);i++ {
+	//	if start == 0 && body[i] != 0x00 {
+	//		start = i
+	//	}
+	//	if i>start && body[i] == 0x00 {
+	//		end = i
+	//		break
+	//	}
+	//}
+	//body = body[start:end]
+	err = json.Unmarshal(body, cache)
+	if err != nil {
+		log.Errorf("unmarshal cache %s file %s failed %v. ", string(body), pm.procCacheFile, err)
+		return
+	}
+	pm.procs = cache.Procs
+	pm.eventListeners = cache.EventListeners
+}
+
+func (pm *Manager) FlushCache()  {
+	log.Info("do flush cache. ")
+	if pm.procCacheFile == "" {
+		return
+	}
+
+	f, err := os.OpenFile(pm.procCacheFile, os.O_RDWR|os.O_TRUNC, 0666)
+	if err != nil {
+		log.Warningf("open cache file %s failed %v, proc cache is skipped. ", pm.procCacheFile, err)
+		return
+	}
+
+	t := time.NewTicker(time.Second*10)
+	for {
+		select{
+		case <- t.C:
+			log.Infoln("begin to sync cache. ")
+			pm.lock.Lock()
+			c := CacheInfo{}
+			c.EventListeners = pm.eventListeners
+			c.Procs = pm.procs
+			m, _ := json.Marshal(&c)
+			f.Truncate(0)
+			f.Seek(0, 0)
+			f.Write(m)
+			f.Sync()
+			log.Infoln("sync cache file ok. ")
+			pm.lock.Unlock()
+		}
+	}
+	f.Close()
 }

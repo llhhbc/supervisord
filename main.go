@@ -166,6 +166,7 @@ func main() {
 				os.Exit(0)
 			case flags.ErrCommandRequired:
 				log.SetOutput(os.Stdout)
+				fmt.Println("get daemon", options.Daemon)
 				if options.Daemon {
 					logFile := getSupervisordLogFile(options.Configuration)
 					Daemonize(logFile, runServer)

@@ -1,6 +1,7 @@
 package process
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -914,4 +915,61 @@ func (p *Process) GetStatus() string {
 		return p.cmd.ProcessState.String()
 	}
 	return "running"
+}
+
+func (p *Process) ToInfo() *Info {
+	res := Info{}
+	res.SupervisorID = p.supervisorID
+	res.Config = p.config
+	res.StartTime = p.startTime
+	res.StopTime = p.stopTime
+	res.State = p.state
+	if p.cmd != nil && p.cmd.Process != nil {
+		res.Pid = p.cmd.Process.Pid
+	}
+	return &res
+}
+
+type Info struct {
+	SupervisorID string
+	Config *config.Entry
+	StartTime time.Time
+	StopTime time.Time
+	State State
+	Pid int
+}
+
+func (i *Info) ToProcess(res *Process) error  {
+	res.supervisorID = i.SupervisorID
+	res.config = i.Config
+	res.startTime = i.StartTime
+	res.stopTime = i.StopTime
+	res.state = i.State
+	err := res.createProgramCommand()
+	if err != nil {
+		return fmt.Errorf("create process from info failed %v. ", err)
+	}
+	res.cmd.Process = &os.Process{}
+	res.cmd.Process.Pid = i.Pid
+	a := int32(0)
+	res.retryTimes = &a
+	return nil
+}
+
+func (p *Process) UnmarshalJSON(b []byte) error {
+	info := Info{}
+	err := json.Unmarshal(b, &info)
+	if err != nil {
+		return err
+	}
+	err = info.ToProcess(p)
+	if err != nil {
+		return fmt.Errorf("init process failed %v. ", err)
+	}
+	return nil
+}
+
+func (p *Process) MarshalJSON() ([]byte, error) {
+	i := p.ToInfo()
+	return json.Marshal(i)
 }
